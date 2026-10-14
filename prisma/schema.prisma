@@ -1,0 +1,294 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentCategory {
+  NID
+  PASSPORT
+  LAND_KHATIAN
+  LAND_NAMJARI
+  DRIVING_LICENSE
+  TIN
+  VEHICLE_FITNESS
+  TRADE_LICENSE
+}
+
+enum DocumentStatus {
+  ACTIVE
+  EXPIRING
+  EXPIRED
+}
+
+enum ExpenseCategory {
+  UTILITY
+  GROCERY
+  EDUCATION
+  HEALTHCARE
+  TRAVEL
+  EMI
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  BKASH
+  NAGAD
+  ROCKET
+  BANK
+  CARD
+}
+
+enum UtilityProvider {
+  DESCO
+  DPDC
+  WASA
+  TITAS
+  INTERNET
+}
+
+enum TaskCategory {
+  BILL
+  EXAM
+  JOB
+  HEALTH
+  FAMILY
+  HOME
+  VEHICLE
+  PERSONAL
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+}
+
+model User {
+  id            String           @id @default(cuid())
+  phone         String           @unique
+  name          String
+  nid           String?
+  district      String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  documents     Document[]
+  expenses      Expense[]
+  incomes       Income[]
+  budgets       Budget[]
+  bills         UtilityBill[]
+  tasks         Task[]
+  family        FamilyMember[]
+  notifications Notification[]
+  progress      ServiceProgress[]
+  assistantLogs AssistantLog[]
+  conversations Conversation[]
+}
+
+model FamilyMember {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  relation       String
+  dateOfBirth    DateTime?
+  medicalHistory String?
+  documents      Document[]
+  tasks          Task[]
+  createdAt      DateTime   @default(now())
+
+  @@index([userId])
+}
+
+model Document {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMemberId String?
+  familyMember   FamilyMember?    @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+  category       DocumentCategory
+  title          String
+  number         String
+  fileUrl        String?
+  fileName       String?
+  issueDate      DateTime?
+  expiryDate     DateTime?
+  holderName     String
+  status         DocumentStatus   @default(ACTIVE)
+  ocrPayload     Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([userId, category])
+  @@index([userId, expiryDate])
+}
+
+model Expense {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Int
+  category      ExpenseCategory
+  paymentMethod PaymentMethod   @default(CASH)
+  date          DateTime
+  notes         String
+  source        String          @default("manual")
+  createdAt     DateTime        @default(now())
+
+  @@index([userId, date])
+}
+
+model Income {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Int
+  category      String
+  paymentMethod PaymentMethod   @default(BANK)
+  date          DateTime
+  notes         String
+  createdAt     DateTime        @default(now())
+
+  @@index([userId, date])
+}
+
+model Budget {
+  id       String          @id @default(cuid())
+  userId   String
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category ExpenseCategory
+  month    String
+  limit    Int
+
+  @@unique([userId, category, month])
+}
+
+model UtilityBill {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      UtilityProvider
+  accountNo     String
+  amount        Int
+  dueDate       DateTime
+  isPaid        Boolean         @default(false)
+  paidAt        DateTime?
+  paymentMethod PaymentMethod?
+  reference     String?
+  lastFetchedAt DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([userId, dueDate])
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+  title          String
+  category       TaskCategory
+  dueDate        DateTime
+  priority       Priority     @default(MEDIUM)
+  isCompleted    Boolean      @default(false)
+  isRecurring    Boolean      @default(false)
+  recurrence     String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@index([userId, dueDate])
+}
+
+model CivicServiceGuide {
+  id                String            @id @default(cuid())
+  slug              String            @unique
+  title             String
+  category          String
+  summary           String
+  office            String
+  portal            String
+  steps             Json
+  documentsRequired Json
+  fees              Json
+  tips              Json
+  branches          Json
+  progress          ServiceProgress[]
+}
+
+model ServiceProgress {
+  id      String            @id @default(cuid())
+  userId  String
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guideId String
+  guide   CivicServiceGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  step    Int               @default(0)
+  checked Json              @default("[]")
+
+  @@unique([userId, guideId])
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel
+  status    NotificationStatus   @default(QUEUED)
+  title     String
+  body      String
+  phone     String?
+  dedupeKey String?
+  createdAt DateTime             @default(now())
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, status])
+}
+
+model Conversation {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model AssistantLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  utterance String
+  intent    Json
+  reply     String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
